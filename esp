@@ -1,0 +1,210 @@
+-- Rayfield読み込み
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "ESP Controller",
+    LoadingTitle = "ESP Module",
+    LoadingSubtitle = "By You",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "ESP_Config",
+        FileName = "ESP_Settings"
+    }
+})
+
+local Tab = Window:CreateTab("ESP")
+local Sec = Tab:CreateSection("ESP Settings")
+
+-- 設定テーブル
+local ESP_SETTINGS = {
+    MasterEnabled = false,
+    ShowName = true,
+    ShowBox = true,
+    ShowSkeleton = true,
+    Color = Color3.fromRGB(255, 230, 0)
+}
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- プレイヤーごとの描画オブジェクト管理
+local Drawings = {}
+
+local function cleanupDrawing(data)
+    if data.name then
+        pcall(function() data.name:Remove() end)
+    end
+    if data.box then
+        pcall(function() data.box:Remove() end)
+    end
+    if data.lines then
+        for _, l in pairs(data.lines) do
+            pcall(function() l:Remove() end)
+        end
+    end
+end
+
+local function createESP(player)
+    if player == LocalPlayer then return end
+    if Drawings[player] then
+        cleanupDrawing(Drawings[player])
+        Drawings[player] = nil
+    end
+    if not player.Character then return end
+    local char = player.Character
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    local data = {
+        name = Drawing.new("Text"),
+        box = Drawing.new("Square"),
+        lines = {}
+    }
+
+    data.name.Size = 16
+    data.name.Center = true
+    data.name.Outline = true
+    data.name.Color = ESP_SETTINGS.Color
+
+    data.box.Thickness = 1
+    data.box.Filled = false
+    data.box.Color = ESP_SETTINGS.Color
+
+    for i = 1, 6 do
+        local l = Drawing.new("Line")
+        l.Thickness = 1
+        l.Color = ESP_SETTINGS.Color
+        data.lines[i] = l
+    end
+
+    Drawings[player] = data
+
+    local conn
+    conn = RunService.RenderStepped:Connect(function()
+        if not player.Character or not ESP_SETTINGS.MasterEnabled then
+            data.name.Visible = false
+            data.box.Visible = false
+            for _, l in pairs(data.lines) do l.Visible = false end
+            return
+        end
+
+        local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+        if not rootPart then
+            data.name.Visible = false
+            data.box.Visible = false
+            for _, l in pairs(data.lines) do l.Visible = false end
+            return
+        end
+
+        local pos, vis = Camera:WorldToViewportPoint(rootPart.Position)
+        if vis then
+            -- 名前表示
+            if ESP_SETTINGS.ShowName then
+                data.name.Visible = true
+                data.name.Position = Vector2.new(pos.X, pos.Y - 45)
+                data.name.Text = player.Name
+            else
+                data.name.Visible = false
+            end
+
+            -- ボックス
+            if ESP_SETTINGS.ShowBox then
+                local tl = Camera:WorldToViewportPoint(rootPart.Position + Vector3.new(-2, 3, 0))
+                local br = Camera:WorldToViewportPoint(rootPart.Position + Vector3.new(2, -3, 0))
+                data.box.Visible = true
+                data.box.Position = Vector2.new(tl.X, tl.Y)
+                data.box.Size = Vector2.new(br.X - tl.X, br.Y - tl.Y)
+            else
+                data.box.Visible = false
+            end
+
+            -- スケルトン
+            if ESP_SETTINGS.ShowSkeleton then
+                local parts = {
+                    Head = player.Character:FindFirstChild("Head"),
+                    Torso = player.Character:FindFirstChild("UpperTorso") or player.Character:FindFirstChild("Torso"),
+                    ArmL = player.Character:FindFirstChild("LeftUpperArm") or player.Character:FindFirstChild("Left Arm"),
+                    ArmR = player.Character:FindFirstChild("RightUpperArm") or player.Character:FindFirstChild("Right Arm"),
+                    LegL = player.Character:FindFirstChild("LeftUpperLeg") or player.Character:FindFirstChild("Left Leg"),
+                    LegR = player.Character:FindFirstChild("RightUpperLeg") or player.Character:FindFirstChild("Right Leg"),
+                }
+
+                local function drawLine(line, a, b)
+                    if a and b then
+                        local pa, av = Camera:WorldToViewportPoint(a.Position)
+                        local pb, bv = Camera:WorldToViewportPoint(b.Position)
+                        if av and bv then
+                            line.Visible = true
+                            line.From = Vector2.new(pa.X, pa.Y)
+                            line.To = Vector2.new(pb.X, pb.Y)
+                        else
+                            line.Visible = false
+                        end
+                    else
+                        line.Visible = false
+                    end
+                end
+
+                drawLine(data.lines[1], parts.Head, parts.Torso)
+                drawLine(data.lines[2], parts.Torso, parts.ArmL)
+                drawLine(data lines[3], parts.Torso, parts.ArmR)
+                drawLine(data lines[4], parts.Torso, parts.HumanoidRootPart)
+                drawLine(data.lines[5], parts.HumanoidRootPart, parts.LegL)
+                drawLine(data.lines[6], parts.HumanoidRootPart, parts.LegR)
+            else
+                for _, l in pairs(data.lines) do l.Visible = false end
+            end
+
+        else
+            data.name.Visible = false
+            data.box.Visible = false
+            for _, l in pairs(data.lines) do l.Visible = false end
+        end
+    end)
+
+    player.CharacterRemoving:Connect(function()
+        conn:Disconnect()
+        cleanupDrawing(data)
+        Drawings[player] = nil
+    end)
+end
+
+-- 全てのプレイヤーに適用
+for _, plr in ipairs(Players:GetPlayers()) do
+    if plr ~= LocalPlayer then
+        createESP(plr)
+    end
+end
+Players.PlayerAdded:Connect(createESP)
+
+-- UIトグル
+Sec:CreateToggle({
+    Name = "ESP 全体",
+    CurrentValue = false,
+    Callback = function(v)
+        ESP_SETTINGS.MasterEnabled = v
+    end
+})
+Sec:CreateToggle({
+    Name = "名前表示",
+    CurrentValue = true,
+    Callback = function(v)
+        ESP_SETTINGS.ShowName = v
+    end
+})
+Sec:CreateToggle({
+    Name = "ボックス表示",
+    CurrentValue = true,
+    Callback = function(v)
+        ESP_SETTINGS.ShowBox = v
+    end
+})
+Sec:CreateToggle({
+    Name = "スケルトン表示",
+    CurrentValue = true,
+    Callback = function(v)
+        ESP_SETTINGS.ShowSkeleton = v
+    end
+})
