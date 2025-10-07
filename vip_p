@@ -1,0 +1,193 @@
+--// Rayfield Loader
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Rayfield ESP Controller",
+    LoadingTitle = "ESP System",
+    LoadingSubtitle = "by じゃが",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "ESP_Config",
+        FileName = "ESP_Settings"
+    }
+})
+
+local Tab = Window:CreateTab("ESP", 4483362458)
+local Section = Tab:CreateSection("ESP コントローラー")
+
+--// 設定
+local ESP_SETTINGS = {
+    MasterEnabled = false,
+    ShowName = true,
+    ShowBox = true,
+    ShowSkeleton = true,
+    Color = Color3.fromRGB(255, 230, 0)
+}
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local Drawings = {}
+
+--// ESP作成関数
+local function createESP(player)
+    if player == LocalPlayer or not player.Character then return end
+
+    local char = player.Character
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    local data = {
+        name = Drawing.new("Text"),
+        box = Drawing.new("Square"),
+        lines = {}
+    }
+
+    data.name.Size = 16
+    data.name.Center = true
+    data.name.Outline = true
+    data.name.Color = ESP_SETTINGS.Color
+
+    data.box.Thickness = 1
+    data.box.Filled = false
+    data.box.Color = ESP_SETTINGS.Color
+
+    for i = 1, 6 do
+        data.lines[i] = Drawing.new("Line")
+        data.lines[i].Thickness = 1
+        data.lines[i].Color = ESP_SETTINGS.Color
+    end
+
+    Drawings[player] = data
+
+    RunService.RenderStepped:Connect(function()
+        -- 🎛️ マスターオフの時は全部非表示
+        if not ESP_SETTINGS.MasterEnabled then
+            data.name.Visible = false
+            data.box.Visible = false
+            for _, l in pairs(data.lines) do l.Visible = false end
+            return
+        end
+
+        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+            data.name.Visible = false
+            data.box.Visible = false
+            for _, l in pairs(data.lines) do l.Visible = false end
+            return
+        end
+
+        local root = player.Character:FindFirstChild("HumanoidRootPart")
+        local pos, vis = Camera:WorldToViewportPoint(root.Position)
+        if vis then
+            -- 名前
+            if ESP_SETTINGS.ShowName then
+                data.name.Visible = true
+                data.name.Position = Vector2.new(pos.X, pos.Y - 45)
+                data.name.Text = player.Name
+            else
+                data.name.Visible = false
+            end
+
+            -- ボックス
+            if ESP_SETTINGS.ShowBox then
+                local tl = Camera:WorldToViewportPoint(root.Position + Vector3.new(-2, 3, 0))
+                local br = Camera:WorldToViewportPoint(root.Position + Vector3.new(2, -3, 0))
+                data.box.Visible = true
+                data.box.Position = Vector2.new(tl.X, tl.Y)
+                data.box.Size = Vector2.new(br.X - tl.X, br.Y - tl.Y)
+            else
+                data.box.Visible = false
+            end
+
+            -- スケルトン
+            if ESP_SETTINGS.ShowSkeleton then
+                local char = player.Character
+                local parts = {
+                    Head = char:FindFirstChild("Head"),
+                    HRP = char:FindFirstChild("HumanoidRootPart"),
+                    Torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso"),
+                    LeftArm = char:FindFirstChild("LeftUpperArm") or char:FindFirstChild("Left Arm"),
+                    RightArm = char:FindFirstChild("RightUpperArm") or char:FindFirstChild("Right Arm"),
+                    LeftLeg = char:FindFirstChild("LeftUpperLeg") or char:FindFirstChild("Left Leg"),
+                    RightLeg = char:FindFirstChild("RightUpperLeg") or char:FindFirstChild("Right Leg"),
+                }
+
+                local function drawLine(line, a, b)
+                    if a and b then
+                        local pa, av = Camera:WorldToViewportPoint(a.Position)
+                        local pb, bv = Camera:WorldToViewportPoint(b.Position)
+                        if av and bv then
+                            line.Visible = true
+                            line.From = Vector2.new(pa.X, pa.Y)
+                            line.To = Vector2.new(pb.X, pb.Y)
+                        else
+                            line.Visible = false
+                        end
+                    else
+                        line.Visible = false
+                    end
+                end
+
+                drawLine(data.lines[1], parts.Head, parts.Torso)
+                drawLine(data.lines[2], parts.Torso, parts.HRP)
+                drawLine(data.lines[3], parts.Torso, parts.LeftArm)
+                drawLine(data.lines[4], parts.Torso, parts.RightArm)
+                drawLine(data.lines[5], parts.HRP, parts.LeftLeg)
+                drawLine(data.lines[6], parts.HRP, parts.RightLeg)
+            else
+                for _, l in pairs(data.lines) do l.Visible = false end
+            end
+        else
+            data.name.Visible = false
+            data.box.Visible = false
+            for _, l in pairs(data.lines) do l.Visible = false end
+        end
+    end)
+end
+
+--// プレイヤー登録
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then
+        createESP(p)
+    end
+end
+Players.PlayerAdded:Connect(createESP)
+
+--// UIトグル設定
+Section:CreateToggle({
+    Name = "ESP 全体ON/OFF",
+    CurrentValue = false,
+    Flag = "ESP_MasterToggle",
+    Callback = function(Value)
+        ESP_SETTINGS.MasterEnabled = Value
+    end,
+})
+
+Section:CreateToggle({
+    Name = "名前ESP",
+    CurrentValue = true,
+    Flag = "ESP_Name",
+    Callback = function(Value)
+        ESP_SETTINGS.ShowName = Value
+    end,
+})
+
+Section:CreateToggle({
+    Name = "ボックスESP",
+    CurrentValue = true,
+    Flag = "ESP_Box",
+    Callback = function(Value)
+        ESP_SETTINGS.ShowBox = Value
+    end,
+})
+
+Section:CreateToggle({
+    Name = "スケルトンESP",
+    CurrentValue = true,
+    Flag = "ESP_Skeleton",
+    Callback = function(Value)
+        ESP_SETTINGS.ShowSkeleton = Value
+    end,
+})
